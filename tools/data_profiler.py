@@ -23,3 +23,4 @@ class DataProfiler:
         }
 
         return summary
+    
