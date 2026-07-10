@@ -8,6 +8,14 @@ sys.path.append(PROJECT_ROOT)
 from tools.file_reader import FileReader
 from tools.data_profiler import DataProfiler
 from agents.data_cleaning_agent import DataCleaningAgent
+from agents.dataset_understanding_agent import DatasetUnderstandingAgent
+
+@st.cache_resource
+def load_dataset_agent():
+    return DatasetUnderstandingAgent()
+
+dataset_agent = load_dataset_agent()
+
 
 st.set_page_config(
     page_title="AI Data Analyst Agent",
@@ -147,7 +155,7 @@ if uploaded_file is not None:
 
     
     #displaying outliers
-    
+
     st.write("### Outlier Detection")
 
     if not outliers.empty:
@@ -162,3 +170,14 @@ if uploaded_file is not None:
         )
     else:
         st.success("No outliers detected ✅")
+
+
+    st.subheader("🤖 AI Dataset Understanding")
+
+    if st.button("Analyze Dataset with AI"):
+
+        with st.spinner("AI is analyzing the dataset..."):
+
+            analysis = dataset_agent.analyze(df)
+
+            st.markdown(analysis)
