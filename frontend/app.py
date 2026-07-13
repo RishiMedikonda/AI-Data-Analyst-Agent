@@ -1,21 +1,29 @@
-import streamlit as st
 import os
 import sys
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(PROJECT_ROOT)
+import streamlit as st
 
-from tools.file_reader import FileReader
-from tools.data_profiler import DataProfiler
+
+# ---------------------------------------------------------
+# Project imports
+# ---------------------------------------------------------
+
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))
+)
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
 from agents.data_cleaning_agent import DataCleaningAgent
 from agents.dataset_understanding_agent import DatasetUnderstandingAgent
+from tools.data_profiler import DataProfiler
+from tools.file_reader import FileReader
 
-@st.cache_resource
-def load_dataset_agent():
-    return DatasetUnderstandingAgent()
 
-dataset_agent = load_dataset_agent()
-
+# ---------------------------------------------------------
+# Streamlit configuration
+# ---------------------------------------------------------
 
 st.set_page_config(
     page_title="AI Data Analyst Agent",
@@ -23,144 +31,230 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 AI Agent")
-#st.title("📊 AI Data Analyst Agent")
+
+# ---------------------------------------------------------
+# Load AI agent only once
+# ---------------------------------------------------------
+
+@st.cache_resource
+def load_dataset_agent():
+    return DatasetUnderstandingAgent()
+
+
+dataset_agent = load_dataset_agent()
+
+
+# ---------------------------------------------------------
+# Reusable UI function
+# ---------------------------------------------------------
+
+def display_dataset_summary(summary, title):
+    """
+    Displays dataset summary using Streamlit metric cards.
+    """
+
+    st.subheader(title)
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Rows", summary["Rows"])
+    col2.metric("Columns", summary["Columns"])
+    col3.metric("Missing Values", summary["Missing Values"])
+
+    col4, col5, col6 = st.columns(3)
+
+    col4.metric("Duplicate Rows", summary["Duplicate Rows"])
+    col5.metric("Numeric Columns", summary["Numeric Columns"])
+    col6.metric(
+        "Categorical Columns",
+        summary["Categorical Columns"]
+    )
+
+
+# ---------------------------------------------------------
+# Main UI
+# ---------------------------------------------------------
+
+st.title("📊 AI Data Analyst Agent")
 
 uploaded_file = st.file_uploader(
     "Upload CSV File",
     type=["csv"]
 )
 
+
 if uploaded_file is not None:
 
-    df = FileReader.read_csv(uploaded_file)
-    #st.write(df.dtypes)
-    # st.write(df["Date"].dtype)
-    # st.write(df["Date"].head())
-    # st.write(df["Date"].iloc[0])
-    # st.write(type(df["Date"].iloc[0]))
+    # -----------------------------------------------------
+    # 1. Read original dataset
+    # -----------------------------------------------------
 
+    raw_df = FileReader.read_csv(uploaded_file)
 
     st.success("CSV Uploaded Successfully ✅")
 
-#showing the summary of the table
-    summary = DataProfiler.get_summary(df)
-    st.subheader("📊 Dataset Summary")
 
-    col1, col2, col3 = st.columns(3)
+    # -----------------------------------------------------
+    # 2. Original dataset summary
+    # -----------------------------------------------------
 
-    with col1:
-        st.metric("Rows", summary["Rows"])
+    raw_summary = DataProfiler.get_summary(raw_df)
 
-    with col2:
-        st.metric("Columns", summary["Columns"])
-
-    with col3:
-        st.metric("Missing Values", summary["Missing Values"])
-
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
-        st.metric("Duplicate Rows", summary["Duplicate Rows"])
-
-    with col5:
-        st.metric("Numeric Columns", summary["Numeric Columns"])
-
-    with col6:
-        st.metric("Categorical Columns", summary["Categorical Columns"])
+    display_dataset_summary(
+        raw_summary,
+        "📊 Original Dataset Summary"
+    )
 
 
-    missing = DataCleaningAgent.detect_missing_values(df)
+    # -----------------------------------------------------
+    # 3. Original dataset preview
+    # -----------------------------------------------------
 
-    duplicates = DataCleaningAgent.detect_duplicate_rows(df)
+    st.subheader("Original Dataset Preview")
 
-    date_columns = DataCleaningAgent.detect_date_columns(df)
+    st.dataframe(
+        raw_df.head(),
+        use_container_width=True
+    )
 
-    df = DataCleaningAgent.convert_date_columns(df, date_columns)
 
-    datatypes = DataCleaningAgent.get_column_datatypes(df)
-    df = DataCleaningAgent.fill_missing_values(df)
+    # -----------------------------------------------------
+    # 4. Detect data-quality issues
+    # -----------------------------------------------------
 
-    df, removed_duplicates = DataCleaningAgent.remove_duplicate_rows(df)
+    missing_values = (
+        DataCleaningAgent.detect_missing_values(raw_df)
+    )
 
-    df = DataCleaningAgent.standardize_column_names(df)
+    duplicate_count = (
+        DataCleaningAgent.detect_duplicate_rows(raw_df)
+    )
 
-    outliers = DataCleaningAgent.detect_outliers(df)
-    
-# showing the preview of dataset
-    st.subheader("Dataset Preview")
+    date_columns = (
+        DataCleaningAgent.detect_date_columns(raw_df)
+    )
 
-    st.dataframe(df.head())
+    original_datatypes = (
+        DataCleaningAgent.get_column_datatypes(raw_df)
+    )
 
-# data cleaning
+
+    # -----------------------------------------------------
+    # 5. Data cleaning report
+    # -----------------------------------------------------
+
     st.subheader("🧹 Data Cleaning Report")
+
     st.write("### Missing Values")
 
-    if len(missing) > 0:
-        st.dataframe(missing)
+    if len(missing_values) > 0:
+        st.dataframe(
+            missing_values,
+            use_container_width=True
+        )
     else:
         st.success("No Missing Values Found ✅")
 
+
     st.write("### Duplicate Rows")
-    st.metric("Duplicate Rows", duplicates)
+
+    st.metric(
+        "Duplicate Rows",
+        duplicate_count
+    )
+
 
     st.write("### Column Data Types")
-    st.dataframe(datatypes)
+
+    st.dataframe(
+        original_datatypes,
+        use_container_width=True
+    )
+
 
     st.write("### Detected Date Columns")
 
     if date_columns:
-        for col in date_columns:
-            st.success(f"📅 {col}")
+        for column in date_columns:
+            st.success(f"📅 {column}")
     else:
         st.info("No Date Columns Found")
+
+
+    # -----------------------------------------------------
+    # 6. Create cleaned dataset
+    # -----------------------------------------------------
+
+    cleaned_df = raw_df.copy()
+
+    if date_columns:
+        cleaned_df = (
+            DataCleaningAgent.convert_date_columns(
+                cleaned_df,
+                date_columns
+            )
+        )
+
+    cleaned_df = (
+        DataCleaningAgent.fill_missing_values(cleaned_df)
+    )
+
+    cleaned_df, removed_duplicates = (
+        DataCleaningAgent.remove_duplicate_rows(cleaned_df)
+    )
+
+    cleaned_df = (
+        DataCleaningAgent.standardize_column_names(
+            cleaned_df
+        )
+    )
+
+
+    # -----------------------------------------------------
+    # 7. Cleaning results
+    # -----------------------------------------------------
 
     st.write("### Duplicate Cleaning")
 
     if removed_duplicates > 0:
-        st.success(f"Removed {removed_duplicates} duplicate rows ✅")
+        st.success(
+            f"Removed {removed_duplicates} duplicate rows ✅"
+        )
     else:
         st.success("No duplicate rows to remove ✅")
 
-    st.write("### Cleaned Dataset")
 
-    st.dataframe(df.head())
+    st.subheader("Cleaned Dataset Preview")
 
-#getting summary of Cleaned Data Set
+    st.dataframe(
+        cleaned_df.head(),
+        use_container_width=True
+    )
 
-    summary = DataProfiler.get_summary(df)
-    st.subheader("📊 Cleaned Dataset Summary")
 
-    col1, col2, col3 = st.columns(3)
+    cleaned_summary = DataProfiler.get_summary(cleaned_df)
 
-    with col1:
-        st.metric("Rows", summary["Rows"])
+    display_dataset_summary(
+        cleaned_summary,
+        "📊 Cleaned Dataset Summary"
+    )
 
-    with col2:
-        st.metric("Columns", summary["Columns"])
 
-    with col3:
-        st.metric("Missing Values", summary["Missing Values"])
+    # -----------------------------------------------------
+    # 8. Outlier detection
+    # -----------------------------------------------------
 
-    col4, col5, col6 = st.columns(3)
+    outliers = DataCleaningAgent.detect_outliers(
+        cleaned_df
+    )
 
-    with col4:
-        st.metric("Duplicate Rows", summary["Duplicate Rows"])
-
-    with col5:
-        st.metric("Numeric Columns", summary["Numeric Columns"])
-
-    with col6:
-        st.metric("Categorical Columns", summary["Categorical Columns"])
-
-    
-    #displaying outliers
-
-    st.write("### Outlier Detection")
+    st.subheader("Outlier Detection")
 
     if not outliers.empty:
+
         st.warning(
-            f"Outliers were detected in {len(outliers)} numeric column(s)."
+            f"Outliers were detected in "
+            f"{len(outliers)} numeric column(s)."
         )
 
         st.dataframe(
@@ -168,16 +262,36 @@ if uploaded_file is not None:
             use_container_width=True,
             hide_index=True
         )
+
     else:
         st.success("No outliers detected ✅")
 
 
+    # -----------------------------------------------------
+    # 9. AI dataset understanding
+    # -----------------------------------------------------
+
     st.subheader("🤖 AI Dataset Understanding")
 
-    if st.button("Analyze Dataset with AI"):
+    if st.button(
+        "Analyze Dataset with AI",
+        type="primary"
+    ):
 
-        with st.spinner("AI is analyzing the dataset..."):
+        with st.spinner(
+            "AI is analyzing the cleaned dataset..."
+        ):
 
-            analysis = dataset_agent.analyze(df)
+            try:
 
-            st.markdown(analysis)
+                analysis = dataset_agent.analyze(
+                    cleaned_df
+                )
+
+                st.markdown(analysis)
+
+            except Exception as error:
+
+                st.error(
+                    f"AI analysis failed: {error}"
+                )
